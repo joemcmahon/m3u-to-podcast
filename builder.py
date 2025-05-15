@@ -3,6 +3,14 @@ import sys
 import shlex
 import subprocess
 
+def create_silence_file():
+    """Generates 10 minutes of silence."""
+    silence_file = "silence.mp3"
+    if not os.path.exists(silence_file):
+        print("Creating silence file...")
+        subprocess.run(["ffmpeg", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "600", "-q:a", "2", silence_file], check=True)
+    return silence_file
+
 def convert_to_mp3(track):
     """Converts M4A to MP3 if needed."""
     if track.lower().endswith(".m4a"):
@@ -14,17 +22,19 @@ def convert_to_mp3(track):
     return track  # Return unchanged if already MP3
 
 def parse_m3u(m3u_path):
-    """Extracts track paths, filtering 'Equinox Speaks' & converting M4A."""
+    """Extracts track paths, converting M4A and replacing 'Equinox Speaks' with silence."""
     tracks = []
+    silence_file = create_silence_file()  # Ensure silence file exists
     with open(m3u_path, "r", encoding="utf-8") as f:
         for line in f:
             if line.strip() and not line.startswith("#"):
                 track_path = line.strip()
                 track_name = os.path.basename(track_path).rsplit(".", 1)[0]
                 if "equinox speaks" in track_name.lower():
-                    print(f"Skipping: {track_name}")
-                    continue  # Exclude these
-                tracks.append((convert_to_mp3(track_path), track_name))
+                    print(f"Replacing: {track_name} → Silence")
+                    tracks.append((silence_file, "Silence Placeholder"))
+                else:
+                    tracks.append((convert_to_mp3(track_path), track_name))
     return tracks
 
 def generate_ffmpeg_concat(tracks, concat_file):
@@ -69,3 +79,4 @@ if __name__ == "__main__":
 
     print(f"✅ Chapter file '{chapter_file}' generated.")
     print(f"✅ Merged audio '{output_mp3}' created.")
+
