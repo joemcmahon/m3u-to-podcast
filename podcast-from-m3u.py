@@ -1,3 +1,4 @@
+#!/Users/joemcmahon/.pyenv/shims/python3
 import os
 import sys
 import shlex
@@ -38,10 +39,11 @@ def parse_m3u(m3u_path):
     return tracks
 
 def generate_ffmpeg_concat(tracks, concat_file):
-    """Creates FFmpeg concat file with properly quoted filenames."""
+    """Creates FFmpeg concat file with properly escaped filenames."""
     with open(concat_file, "w") as f:
         for track, _ in tracks:
-            f.write(f"file {shlex.quote(track)}\n")
+            safe_track = track.replace("'", "'\\''")  # Escape single quotes properly
+            f.write(f"file '{safe_track}'\n")  # Use single quotes for safety
 
 def get_track_duration(track):
     """Gets track duration, handling missing durations."""

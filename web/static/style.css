@@ -1,0 +1,338 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.container {
+    max-width: 600px;
+    width: 100%;
+}
+
+.header {
+    text-align: center;
+    color: white;
+    margin-bottom: 40px;
+}
+
+.header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 8px;
+    font-weight: 700;
+}
+
+.subtitle {
+    font-size: 1rem;
+    opacity: 0.9;
+}
+
+.content {
+    min-height: 400px;
+}
+
+/* Upload Section */
+.upload-section {
+    text-align: center;
+}
+
+.upload-box {
+    background: white;
+    border: 2px dashed #667eea;
+    border-radius: 12px;
+    padding: 50px 30px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 15px;
+}
+
+.upload-box:hover {
+    border-color: #764ba2;
+    background-color: #f8f9ff;
+    transform: translateY(-2px);
+}
+
+.upload-box.dragover {
+    border-color: #764ba2;
+    background-color: #f0f1ff;
+    transform: scale(1.02);
+}
+
+.upload-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+}
+
+.upload-text {
+    font-size: 1.1rem;
+    color: #333;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+.upload-subtext {
+    color: #999;
+    font-size: 0.9rem;
+    margin: 15px 0;
+}
+
+.upload-button {
+    display: inline-block;
+    background: #667eea;
+    color: white;
+    padding: 10px 25px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.3s ease;
+}
+
+.upload-button:hover {
+    background: #764ba2;
+}
+
+.upload-info {
+    color: #999;
+    font-size: 0.85rem;
+    margin-top: 10px;
+}
+
+/* Processing Section */
+.processing-section,
+.complete-section,
+.error-section {
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.processing-card,
+.complete-card,
+.error-card {
+    background: white;
+    border-radius: 12px;
+    padding: 40px 30px;
+    text-align: center;
+}
+
+.processing-card h2,
+.complete-card h2,
+.error-card h2 {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 1.5rem;
+}
+
+.playlist-name,
+.complete-name {
+    color: #666;
+    font-size: 0.95rem;
+    margin-bottom: 30px;
+    word-break: break-word;
+}
+
+/* Progress Bar */
+.progress-container {
+    margin: 30px 0;
+}
+
+.progress-bar {
+    background: #e5e7eb;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.progress-fill {
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    height: 100%;
+    transition: width 0.5s ease;
+    border-radius: 4px;
+}
+
+.progress-text {
+    color: #667eea;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.status-message {
+    color: #666;
+    font-size: 0.95rem;
+    margin: 20px 0;
+    min-height: 20px;
+}
+
+/* Steps */
+.steps {
+    text-align: left;
+    margin: 30px 0;
+    padding: 20px;
+    background: #f8f9ff;
+    border-radius: 8px;
+}
+
+.step {
+    display: flex;
+    align-items: center;
+    margin: 12px 0;
+    color: #999;
+    font-size: 0.95rem;
+}
+
+.step-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-right: 12px;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+}
+
+.step.active .step-icon {
+    color: #667eea;
+    font-weight: bold;
+}
+
+.step.complete .step-icon {
+    color: #10b981;
+}
+
+.step.complete {
+    color: #333;
+}
+
+/* Complete Section */
+.complete-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+}
+
+.error-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+}
+
+.download-section {
+    margin: 30px 0;
+    text-align: left;
+}
+
+.download-section h3 {
+    color: #333;
+    font-size: 0.95rem;
+    margin-bottom: 15px;
+}
+
+.download-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Buttons */
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-secondary {
+    background: #e5e7eb;
+    color: #333;
+}
+
+.btn-secondary:hover {
+    background: #d1d5db;
+    transform: translateY(-2px);
+}
+
+.btn-outline {
+    background: white;
+    color: #667eea;
+    border: 2px solid #667eea;
+    margin-top: 15px;
+}
+
+.btn-outline:hover {
+    background: #f8f9ff;
+    transform: translateY(-2px);
+}
+
+/* Error Section */
+.error-card {
+    background: #fef2f2;
+}
+
+.error-card h2 {
+    color: #991b1b;
+}
+
+.error-message {
+    color: #7f1d1d;
+    background: white;
+    padding: 15px;
+    border-radius: 6px;
+    margin: 20px 0;
+    word-break: break-word;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    text-align: left;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .header h1 {
+        font-size: 2rem;
+    }
+
+    .upload-box {
+        padding: 40px 20px;
+    }
+
+    .processing-card,
+    .complete-card,
+    .error-card {
+        padding: 30px 20px;
+    }
+
+    .btn {
+        padding: 10px 20px;
+    }
+}
