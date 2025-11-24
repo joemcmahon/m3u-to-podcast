@@ -76,6 +76,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from dotenv import load_dotenv
 from mutagen import File as MutagenFile
 from mutagen.id3 import (
     ID3,
@@ -229,6 +230,58 @@ def get_duration_ms(path: Path) -> int:
     return int(round(seconds * 1000))
 
 
+def get_artist_from_audio(path: Path) -> Optional[str]:
+    """
+    Extract artist (TPE1) from audio file.
+    Supports MP3 (ID3) and MP4/M4A.
+    """
+    audio = MutagenFile(path)
+    if audio is None or audio.tags is None:
+        return None
+
+    tags = audio.tags
+
+    # MP3 / ID3
+    if isinstance(tags, ID3):
+        tpe1 = tags.get("TPE1")
+        if tpe1 and tpe1.text:
+            return norm_title(str(tpe1.text[0]))
+
+    # MP4/M4A
+    if audio.__class__.__name__ in ("MP4", "MP4File"):
+        for key in ("\xa9ART", "©ART"):
+            if key in tags and tags[key]:
+                return norm_title(str(tags[key][0]))
+
+    return None
+
+
+def get_album_from_audio(path: Path) -> Optional[str]:
+    """
+    Extract album (TALB) from audio file.
+    Supports MP3 (ID3) and MP4/M4A.
+    """
+    audio = MutagenFile(path)
+    if audio is None or audio.tags is None:
+        return None
+
+    tags = audio.tags
+
+    # MP3 / ID3
+    if isinstance(tags, ID3):
+        talb = tags.get("TALB")
+        if talb and talb.text:
+            return norm_title(str(talb.text[0]))
+
+    # MP4/M4A
+    if audio.__class__.__name__ in ("MP4", "MP4File"):
+        for key in ("\xa9alb", "©alb"):
+            if key in tags and tags[key]:
+                return norm_title(str(tags[key][0]))
+
+    return None
+
+
 def load_id3_or_create(path: Path) -> ID3:
     """Load ID3 tags from an MP3, or create a new tag object if none present."""
     try:
@@ -340,6 +393,37 @@ def build_segments_from_playlist(playlist: Path, episode_date: str) -> List[Segm
 
 # ---------------- validation ---------------- #
 
+def extract_artist_album_from_tracks(
+    segments: List[Segment],
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Extract most common artist and album from music tracks (non-VO segments).
+    Returns (artist, album) or (None, None) if no tracks found.
+    """
+    music_tracks = [s for s in segments if s.kind == "track"]
+
+    if not music_tracks:
+        return None, None
+
+    artists = {}
+    albums = {}
+
+    for seg in music_tracks:
+        artist = get_artist_from_audio(seg.source_path)
+        album = get_album_from_audio(seg.source_path)
+
+        if artist:
+            artists[artist] = artists.get(artist, 0) + 1
+        if album:
+            albums[album] = albums.get(album, 0) + 1
+
+    # Use most common, or None if no metadata found
+    most_common_artist = max(artists, key=artists.get) if artists else None
+    most_common_album = max(albums, key=albums.get) if albums else None
+
+    return most_common_artist, most_common_album
+
+
 def validate_segments(segments: List[Segment], episode_date: str) -> None:
     """
     Validate that:
@@ -399,24 +483,40 @@ def build_chapters_and_tags(
     episode_title: str,
     episode_date: str,
     output_mp3: Path,
+    artist: Optional[str] = None,
+    album: Optional[str] = None,
+    default_artist: str = "Etheric Currents",
+    default_album: str = "Podcast Episode",
 ):
     """
     Build ID3v2.3 tags on output_mp3 with:
     - TIT2 = episode_title
-    - TALB/TPE1/TDRC as generic or derived
+    - TALB/TPE1/TDRC as provided, with fallback defaults
     - global APIC from default_image
     - CTOC
     - CHAP frames with TIT2 + per-chapter APIC
+
+    Args:
+        artist: Artist name to use (e.g., "Equinox Deschanel").
+                If None, attempts to extract from tracks or uses default_artist.
+        album: Album name to use (e.g., "Etheric Currents").
+               If None, attempts to extract from tracks or uses default_album.
+        default_artist: Fallback artist name if not provided and not extracted.
+        default_album: Fallback album name if not provided and not extracted.
     """
     tags = load_id3_or_create(output_mp3)
 
-    # Set high-level fields if not present
-    if "TIT2" not in tags:
-        tags.add(TIT2(encoding=3, text=episode_title))
-    if "TALB" not in tags:
-        tags.add(TALB(encoding=3, text="Podcast Episode"))
-    if "TPE1" not in tags:
-        tags.add(TPE1(encoding=3, text="Etheric Currents"))  # tweak as desired
+    # Always set episode title
+    tags["TIT2"] = TIT2(encoding=3, text=episode_title)
+
+    # Use provided album, or fallback to default_album
+    album_to_use = album if album else default_album
+    tags["TALB"] = TALB(encoding=3, text=album_to_use)
+
+    # Use provided artist, or fallback to default_artist
+    artist_to_use = artist if artist else default_artist
+    tags["TPE1"] = TPE1(encoding=3, text=artist_to_use)
+
     if "TDRC" not in tags and re.fullmatch(r"\d{8}", episode_date):
         # YYYYMMDD -> YYYY-MM-DD
         date_str = f"{episode_date[0:4]}-{episode_date[4:6]}-{episode_date[6:8]}"
@@ -465,13 +565,25 @@ def build_chapters_and_tags(
             end_offset=0,
         )
 
+        # Pre-fetch artist and album once
+        track_artist = get_artist_from_audio(seg.source_path)
+        track_album = get_album_from_audio(seg.source_path)
+
         # Title: keep the full title, but you could strip the date prefix if you want
         title = seg.title
         # For VO, optionally strip "YYYYMMDD " from display title:
         if seg.kind == "vo" and seg.date_code and title.startswith(seg.date_code):
             title = title[len(seg.date_code):].lstrip()
+        # For music tracks, prepend artist name if not intro/outro/break
+        elif seg.kind == "track" and seg.role is None and track_artist:
+            title = f"{track_artist}: {title}"
 
         chap.sub_frames["TIT2"] = TIT2(encoding=3, text=title)
+
+        if track_artist:
+            chap.sub_frames["TPE1"] = TPE1(encoding=3, text=track_artist)
+        if track_album:
+            chap.sub_frames["TALB"] = TALB(encoding=3, text=track_album)
 
         # Per-chapter art
         if seg.kind == "track":
@@ -525,6 +637,9 @@ def build_chapters_and_tags(
 # ---------------- CLI ---------------- #
 
 def main():
+    # Load environment variables from .env file
+    load_dotenv()
+
     parser = argparse.ArgumentParser(
         description="Build a chapterized MP3 episode from a Music.app playlist, "
                     "using only library tracks (including VO tracks with "
@@ -563,6 +678,18 @@ def main():
         default="128k",
         help="Final MP3 audio bitrate, e.g. 128k, 160k, 192k. Default: 128k",
     )
+    parser.add_argument(
+        "--artist",
+        default=None,
+        help="Artist name for the episode (TPE1). If not provided, will try to extract from music tracks, "
+             "then fall back to DEFAULT_ARTIST env var or 'Etheric Currents'.",
+    )
+    parser.add_argument(
+        "--album",
+        default=None,
+        help="Album name for the episode (TALB). If not provided, will try to extract from music tracks, "
+             "then fall back to DEFAULT_ALBUM env var or 'Podcast Episode'.",
+    )
 
     args = parser.parse_args()
 
@@ -582,17 +709,41 @@ def main():
     # 2. Validate that you did your part (VOs present, intro/outro exist)
     validate_segments(segments, episode_date=episode_date)
 
-    # 3. Concatenate audio into final MP3
+    # 3. Extract artist/album from music tracks if not provided via CLI
+    extracted_artist, extracted_album = extract_artist_album_from_tracks(segments)
+
+    # Use CLI args if provided, otherwise use extracted values
+    artist_to_use = args.artist if args.artist else extracted_artist
+    album_to_use = args.album if args.album else extracted_album
+
+    if extracted_artist and not args.artist:
+        print(f"[INFO] Using extracted artist: {extracted_artist}")
+    if extracted_album and not args.album:
+        print(f"[INFO] Using extracted album: {extracted_album}")
+
+    # Get default values from environment or use hardcoded fallbacks
+    default_artist = os.getenv("DEFAULT_ARTIST", "Etheric Currents")
+    default_album = os.getenv("DEFAULT_ALBUM", "Podcast Episode")
+
+    print(f"[DEBUG] extracted_artist={extracted_artist}, extracted_album={extracted_album}")
+    print(f"[DEBUG] artist_to_use={artist_to_use}, album_to_use={album_to_use}")
+    print(f"[DEBUG] default_artist={default_artist}, default_album={default_album}")
+
+    # 4. Concatenate audio into final MP3
     files = [s.source_path for s in segments]
     run_ffmpeg_concat(files, args.output, args.bitrate)
 
-    # 4. Add chapters + tags
+    # 5. Add chapters + tags
     build_chapters_and_tags(
         segments=segments,
         default_image=args.default_image,
         episode_title=args.episode_title,
         episode_date=episode_date,
         output_mp3=args.output,
+        artist=artist_to_use,
+        album=album_to_use,
+        default_artist=default_artist,
+        default_album=default_album,
     )
 
 
