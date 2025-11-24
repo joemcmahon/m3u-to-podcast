@@ -1,70 +1,315 @@
 # m3u to Podcast
 
-More than once, I've hit the problem of not getting a good recording of my live broadcast
-when I'm doing my radio show, which means no podcast for that week. 
+A toolkit for building podcast episodes from Music.app playlists. Originally created to rescue live broadcasts when the recording fails by reconstructing episodes from the playlists used during the show.
 
-I _do_ however, have the Music.app playlists that I use to play the music and
-voiceover breaks, and I decided to assemble a handy little script to recreate
-the _music_ portion of the podcast, allowing me to pull it into whatever editor
-and record replacement voiceovers, giving me a slightly ersatz version of the
-original.
+## Overview
 
-Since a slightly fake live show is better than no show at all, I'm using this
-to cover for me on those days when I screw the pooch and lose the recording.
+This project provides tools to:
+- **Build chapterized podcast episodes** from Music.app playlists, embedding specially-named voiceover segments
+- **Generate playlists** suitable for importing into Music.app from simple artist|track name lists
+- **Analyze and validate** chapter metadata in MP3 files
+- **Create visual reports** of podcast chapter structure
+- **Test episodes** locally via RSS feeds before distribution
 
-## Usage
+## Installation
 
-### Web Interface (Recommended)
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-The easiest way to use this tool is through the web interface:
+# Optional: Create a .env file for default values
+cp .env.example .env
+```
 
-1. Install dependencies (first time only):
-   ```bash
-   pip install -r requirements.txt
-   ```
+Create a `.env` file in the project root:
+```env
+DEFAULT_ARTIST=Your Show Name
+DEFAULT_ALBUM=Your Podcast Name
+```
 
-2. Start the server from Terminal:
-   ```bash
-   ~/Code/m3u-to-podcast/start.sh
-   ```
+## Quick Start
 
-   Or run directly:
-   ```bash
-   cd ~/Code/m3u-to-podcast && python3 app.py
-   ```
+### Building a Podcast Episode (Recommended)
 
-   **Important:** Run from Terminal, not from an IDE. Terminal has full disk access to external drives.
+The main workflow for building a complete podcast episode with chapters:
 
-3. Open your browser to `http://localhost:8080`
+```bash
+python3 build_episode_from_playlist_library.py \
+  --episode-date 20250317 \
+  --episode-title "My Show Title" \
+  --playlist path/to/playlist.m3u \
+  --output episode.mp3 \
+  --default-image cover.jpg \
+  --bitrate 320k
+```
 
-4. Drag and drop your `.m3u` file onto the upload area and watch the conversion happen in real-time
+**What this does:**
+1. Reads your exported Music.app playlist (`.m3u` format)
+2. Identifies voiceover segments by date prefix (e.g., `20250317 Intro`)
+3. Extracts artist/album metadata from music tracks
+4. Concatenates all audio with ffmpeg
+5. Embeds chapter metadata with per-track artist/album info
+6. Creates chapters with smart titles: `Artist: Track Title`
 
-5. Download your converted MP3 and chapter file when complete
+**Output:**
+- `episode.mp3` - Complete podcast with embedded chapters and artwork
 
-### Command-Line Usage
+---
 
-If you prefer the original command-line interface:
+## All Scripts
 
-1. Open Music.app and click on a playlist in the left sidebar.
-2. File > Library > Export Playlist...
-3. Select the target folder, and choose `m3u` as the output format
-4. `python3 podcast-from-m3u.py "Path to the.m3u"`
+### Core Workflow
 
-This will create:
-- An `.mp3` file of all the tracks concatenated
-- A `.txt` file with chapter markers and timestamps for each track
+#### `build_episode_from_playlist_library.py`
+**Builds a fully chapterized podcast episode from a Music.app playlist.**
 
-## Features
+Handles voiceover segments, extracts metadata, and creates proper podcast-ready MP3s with chapters.
 
-- **Drag & drop upload** - Simply drag your .m3u file onto the interface
-- **Real-time progress** - Watch the conversion happen step-by-step
-- **Automatic silence insertion** - Replaces "Equinox Speaks" tracks with silence
-- **M4A conversion** - Automatically converts M4A files to MP3
-- **Chapter support** - Generates chapter markers with track names and timestamps
-- **Direct download** - Download your files immediately after conversion
+```bash
+python3 build_episode_from_playlist_library.py \
+  --episode-date YYYYMMDD \
+  --episode-title "Episode Title" \
+  --playlist path/to/playlist.m3u \
+  --output episode.mp3 \
+  --default-image cover.jpg \
+  [--artist "Override Artist"] \
+  [--album "Override Album"] \
+  [--bitrate 320k]
+```
 
-## Output Files
+**Features:**
+- ✅ Extracts most common artist/album from playlist
+- ✅ Falls back to DEFAULT_ARTIST/DEFAULT_ALBUM from `.env`
+- ✅ Embeds per-chapter artist/album metadata
+- ✅ Music track chapters show as "Artist: Title"
+- ✅ Validates voiceover structure (intro/outro required)
+- ✅ Supports chapter artwork from source files
 
-- **{playlist_name}.mp3** - The concatenated audio file ready for editing
-- **{playlist_name}.txt** - Chapter markers in MM:SS format with track names
-- **{playlist_name}_concat.txt** - FFmpeg concat file (for reference)
+**VO Naming Convention:**
+Voiceover tracks must start with episode date and role:
+- `20250317 Intro` (intro segment)
+- `20250317 Outro` (outro segment)
+- `20250317 Midbreak` (mid-episode break)
+- `20250317 Break 1`, `20250317 Break 2`, etc.
+
+---
+
+#### `tracks-to-m3u.py`
+**Create a playlist (`.m3u`) from a simple text list of tracks.**
+
+Useful for building playlists programmatically or from a text file.
+
+```bash
+# From a text file (one per line: Artist | Track Title)
+python3 tracks-to-m3u.py input.txt output.m3u
+
+# Or from stdin
+cat tracks.txt | python3 tracks-to-m3u.py - output.m3u
+```
+
+**Input Format:**
+```
+Artist Name | Track Title
+Another Artist | Another Track
+```
+
+**Features:**
+- ✅ Fuzzy matching against library database
+- ✅ Automatically builds music library database if missing
+- ✅ Handles multiple artists with same track title
+- ✅ Works with both MP3 and M4A files
+
+---
+
+### Testing & Validation
+
+#### `serve_rss.py`
+**Local RSS feed server for testing podcast episodes.**
+
+Test how your episode displays in locally-running podcast apps before uploading to distribution platforms.
+
+```bash
+python3 serve_rss.py
+# Navigate to: http://localhost:8000/feed.xml
+# Add this URL to your podcast app
+```
+
+**Serves:**
+- RSS feed at `/feed.xml` with episode metadata from MP3 tags
+- Episode MP3 at `/episode.mp3`
+
+---
+
+#### `chapter-analyzer.py`
+**Inspect and validate chapter metadata in MP3 files.**
+
+Detailed analysis of all ID3 tags, chapters, artwork, and file structure.
+
+```bash
+python3 chapter-analyzer.py episode.mp3
+```
+
+**Output:**
+- File metadata (bitrate, sample rate, duration)
+- ID3 tag summary
+- Global artwork
+- Chapter structure with titles, times, and per-chapter metadata
+- Detailed frame information
+
+---
+
+#### `chapter-report.py`
+**Generate an HTML visual report of chapter structure.**
+
+Creates a browsable HTML file showing all chapters with timestamps and artwork.
+
+```bash
+python3 chapter-report.py episode.mp3 [report.html]
+```
+
+**Output:**
+- Interactive HTML report with chapter timeline
+- Chapter titles with timestamps
+- Per-chapter artwork display (including "hidden" artwork)
+- Episode metadata summary
+
+---
+
+### Utilities
+
+#### `build-music-db.py`
+**Build a SQLite database of your Music.app library.**
+
+Creates an indexed database for fast track lookups (used by `tracks-to-m3u.py`).
+
+```bash
+python3 build-music-db.py "/path/to/Music Library" -d music.db
+```
+
+---
+
+#### `rescue_busted_offsets.py`
+**Fix chapter offset errors in MP3 files.**
+
+Repairs chapterized MP3s where byte offsets were written incorrectly, while preserving chapter times, titles, and artwork.
+
+```bash
+python3 rescue_busted_offsets.py broken.mp3
+# Creates: broken.rescued.mp3
+
+# Or specify output:
+python3 rescue_busted_offsets.py broken.mp3 fixed.mp3
+```
+
+---
+
+#### `compare-libraries.py`
+**Compare two Music.app libraries for differences.**
+
+Useful for finding files that need to be added or removed to sync up libraries.
+
+```bash
+python3 compare-libraries.py library1.musiclibrary library2.musiclibrary
+```
+
+---
+
+### Legacy / Experimental
+
+#### `podcast-from-m3u.py`
+Older command-line interface for building podcast episodes. Replaced by `build_episode_from_playlist_library.py`.
+
+---
+
+## Configuration
+
+### Environment Variables (`.env`)
+
+```env
+# Default artist name (used when not extracted from tracks)
+DEFAULT_ARTIST=Your Show Name
+
+# Default album name (used when not extracted from tracks)
+DEFAULT_ALBUM=Your Podcast Series Name
+```
+
+If `.env` is not found, hardcoded defaults are used:
+- DEFAULT_ARTIST: "Etheric Currents"
+- DEFAULT_ALBUM: "Podcast Episode"
+
+---
+
+## Workflow Example
+
+### 1. Prepare Your Playlist
+
+In Music.app:
+1. Create or open your playlist
+2. Add music tracks and voiceover segments
+3. Export: File > Library > Export Playlist
+4. Choose `.m3u` format
+
+### 2. Build the Episode
+
+```bash
+python3 build_episode_from_playlist_library.py \
+  --episode-date 20250317 \
+  --episode-title "Green - A Musical Journey" \
+  --playlist "Green.m3u" \
+  --output "Green.mp3" \
+  --default-image "green-cover.jpg" \
+  --bitrate 320k
+```
+
+### 3. Verify Metadata
+
+```bash
+python3 chapter-analyzer.py Green.mp3
+```
+
+### 4. Test in Podcast App
+
+```bash
+python3 serve_rss.py
+# Add http://localhost:8000/feed.xml to your podcast app
+```
+
+### 5. Generate Documentation
+
+```bash
+python3 chapter-report.py Green.mp3 Green-report.html
+# Open Green-report.html in your browser
+```
+
+---
+
+## Requirements
+
+- Python 3.7+
+- ffmpeg (for audio concatenation)
+- mutagen (ID3 tag handling)
+- dotenv (environment configuration)
+
+See `requirements.txt` for complete dependency list.
+
+---
+
+## Common Issues
+
+### "No VO segments found"
+Make sure your voiceover tracks are named with the correct date and role:
+- Format: `YYYYMMDD Role` (e.g., `20250317 Intro`)
+- Date must match `--episode-date` parameter
+- Roles: `intro`, `outro`, `break`, `midbreak`
+
+### Chapters show wrong artist/album
+Run `chapter-analyzer.py` to inspect the actual metadata embedded in the file. The most common issue is that source tracks don't have ID3 tags set in Music.app.
+
+### "Track not found in library"
+Check that the tracks are actually imported into your Music.app library and that their paths are accessible (especially for external drives).
+
+---
+
+## License
+
+These tools are provided as-is for personal podcast production use.
