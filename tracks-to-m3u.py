@@ -35,7 +35,11 @@ def get_or_create_db(library_path: Path, db_path: str) -> str:
 
     # Import and run the database builder
     try:
-        from build_music_db import scan_and_populate
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build_music_db", "build-music-db.py")
+        build_music_db = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build_music_db)
+        scan_and_populate = build_music_db.scan_and_populate
         scan_and_populate(library_path, db_path, verbose=False)
         print()  # Blank line after scan output
         return db_path
@@ -55,10 +59,10 @@ def similarity_ratio(a: str, b: str) -> float:
 
 def find_best_match(
     artist: str, track: str, conn: sqlite3.Connection
-) -> Optional[Tuple[str, float]]:
+) -> Optional[Tuple[str, float, bool]]:
     """
     Find best matching file path for artist/track combination.
-    Returns (file_path, confidence_score) or None.
+    Returns (file_path, confidence_score, is_ambiguous) or None.
     Uses normalized matching with fuzzy fallback.
     """
     cursor = conn.cursor()
@@ -70,9 +74,11 @@ def find_best_match(
         "SELECT file_path FROM tracks WHERE LOWER(artist) = ? AND LOWER(track_name) = ?",
         (artist_norm, track_norm),
     )
-    result = cursor.fetchone()
-    if result:
-        return (result[0], 1.0)
+    results = cursor.fetchall()
+    if results:
+        # Check for multiple exact matches (ambiguous)
+        is_ambiguous = len(results) > 1
+        return (results[0][0], 1.0, is_ambiguous)
 
     # Try fuzzy matching: get candidates and score them
     cursor.execute(
@@ -84,7 +90,7 @@ def find_best_match(
         (f"%{artist_norm}%", f"%{track_norm}%"),
     )
 
-    best_match = None
+    candidates = []
     best_score = 0.7  # Minimum threshold - require 70% similarity
 
     for file_path, lib_artist, lib_track in cursor.fetchall():
@@ -99,10 +105,19 @@ def find_best_match(
         combined_score = (artist_score * 0.3) + (track_score * 0.7)
 
         if combined_score > best_score:
-            best_score = combined_score
-            best_match = (file_path, combined_score)
+            candidates.append((file_path, combined_score, lib_artist, lib_track))
 
-    return best_match
+    if not candidates:
+        return None
+
+    # Sort by score (highest first)
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    best_match = candidates[0]
+
+    # Check for ambiguity: multiple candidates with similar scores (within 5%)
+    is_ambiguous = len([c for c in candidates if c[1] >= best_match[1] - 0.05]) > 1
+
+    return (best_match[0], best_match[1], is_ambiguous)
 
 
 def load_track_list(input_file: str) -> List[Tuple[str, str]]:
@@ -114,16 +129,25 @@ def load_track_list(input_file: str) -> List[Tuple[str, str]]:
             if not line or line.startswith('#'):
                 continue
 
-            if '|' not in line:
-                print(f"Warning: Skipping line without pipe separator: {line}", file=sys.stderr)
+            if '|' in line:
+                parts = line.split('|', 1)
+                artist = parts[0].strip()
+                track = parts[1].strip()
+
+                if artist and track:
+                    tracks.append((artist, track))
+
+            elif ' - ' in line:
+                parts = line.split(' - ', 1)
+                artist = parts[0].strip()
+                track = parts[1].strip()
+
+                if artist and track:
+                    tracks.append((artist, track))
+
+            else:
+                print(f"Warning: Skipping line without any separator: {line}", file=sys.stderr)
                 continue
-
-            parts = line.split('|', 1)
-            artist = parts[0].strip()
-            track = parts[1].strip()
-
-            if artist and track:
-                tracks.append((artist, track))
 
     return tracks
 
@@ -135,16 +159,28 @@ def create_m3u(
     found = 0
     not_found = []
     matches = []
+    ambiguous = []
 
     for idx, (artist, track) in enumerate(tracks, 1):
         result = find_best_match(artist, track, conn)
 
         if result:
-            path, confidence = result
-            matches.append((idx, path, confidence))
+            path, confidence, is_ambiguous = result
+            matches.append((idx, path, confidence, is_ambiguous))
             found += 1
+            if is_ambiguous:
+                ambiguous.append((idx, artist, track, confidence))
         else:
-            not_found.append((idx, artist, track))
+            result = find_best_match(track, artist, conn)
+
+            if result:
+                path, confidence, is_ambiguous = result
+                matches.append((idx, path, confidence, is_ambiguous))
+                found += 1
+                if is_ambiguous:
+                    ambiguous.append((idx, artist, track, confidence))
+            else:
+                not_found.append((idx, artist, track))
 
     # Write M3U file with both found and not-found entries
     with open(output_file, 'w') as m3u:
@@ -158,7 +194,7 @@ def create_m3u(
             match_for_idx = next((m for m in matches if m[0] == idx), None)
 
             if match_for_idx:
-                idx_num, path, confidence = match_for_idx
+                idx_num, path, confidence, is_ambiguous = match_for_idx
                 m3u.write(f"{path}\n")
             else:
                 # Track not found - write as comment
@@ -170,6 +206,11 @@ def create_m3u(
     # Print summary
     print(f"\nCreated: {output_file}")
     print(f"Found: {found}/{len(tracks)} tracks")
+
+    if ambiguous:
+        print(f"\nAmbiguous matches ({len(ambiguous)}):")
+        for idx, artist, track, confidence in ambiguous:
+            print(f"  {idx:2d}. {artist} | {track} (confidence: {confidence:.2f})")
 
     if not_found:
         print(f"\nCould not find ({len(not_found)}):")

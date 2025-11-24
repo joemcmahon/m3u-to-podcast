@@ -151,6 +151,20 @@ def get_chap_apic(chap: CHAP) -> Optional[Tuple[bytes, str]]:
 
     return None
 
+
+def get_file_apic(tags: ID3) -> Optional[Tuple[bytes, str]]:
+    """
+    Get file-level (album art) APIC from ID3 tags, not from chapters.
+    Returns the first APIC found that's not inside a CHAP frame.
+    """
+    apics = tags.getall("APIC")
+    for apic in apics:
+        if isinstance(apic, APIC):
+            data = apic.data
+            mime = apic.mime or "image/jpeg"
+            return data, mime
+    return None
+
 def image_data_uri(data: bytes, mime_hint: Optional[str]) -> str:
     """Build a data: URI from raw image bytes."""
     mime = mime_hint or "image/jpeg"
@@ -163,6 +177,18 @@ def image_data_uri(data: bytes, mime_hint: Optional[str]) -> str:
             mime = "image/jpeg"
     b64 = base64.b64encode(data).decode("ascii")
     return f"data:{mime};base64,{b64}"
+
+
+def is_nil_offset(value: Optional[int]) -> bool:
+    """
+    Detect if an offset value looks like a bogus sentinel value.
+    E.g., 0xFFFFFFFF or values very close to that (0xFFFFFF00+).
+    Returns True if the offset is corrupted/invalid.
+    """
+    if value is None:
+        return False
+    NIL_OFFSET_THRESHOLD = 0xFFFFFF00  # 4294967040
+    return value >= NIL_OFFSET_THRESHOLD
 
 
 # ---------------- HTML report generation ---------------- #
@@ -227,6 +253,9 @@ def generate_html_report(
         if not ordered_chaps:
             warnings_html += "<p class='warn'>No CHAP (chapter) frames found.</p>\n"
         else:
+            # Get file-level image for fallback
+            file_apic = get_file_apic(tags)
+
             # Build chapter list
             rows = []
             for idx, chap in enumerate(ordered_chaps):
@@ -239,10 +268,28 @@ def generate_html_report(
                 end_str = format_ms(end_ms)
                 dur_str = format_ms(dur_ms)
 
+                # Check for bad offsets
+                has_bad_offset = is_nil_offset(chap.start_offset) or is_nil_offset(chap.end_offset)
+
                 apic = get_chap_apic(chap)
+
+                # Image display logic:
+                # 1. Good pointers + chapter art: show chapter art normally
+                # 2. Bad pointers + chapter art: show chapter art but marked as corrupted
+                # 3. Bad pointers + no chapter art: show default file art (if available) with note
+                # 4. Otherwise: show "No art"
                 if apic is not None:
                     data_uri = image_data_uri(apic[0], apic[1])
-                    img_html = f"<img src='{data_uri}' alt='Chapter art' class='thumb' />"
+                    if has_bad_offset:
+                        # Bad offsets + has image: show image but mark as hidden
+                        img_html = f"<div class='corrupted-art'><img src='{data_uri}' alt='Chapter art (corrupted)' class='thumb' /><p class='art-note'>Image data present but offsets corrupted</p></div>"
+                    else:
+                        # Good offsets: show normally
+                        img_html = f"<img src='{data_uri}' alt='Chapter art' class='thumb' />"
+                elif has_bad_offset and file_apic is not None:
+                    # Bad offsets + no chapter art + file art available: show file art with note
+                    data_uri = image_data_uri(file_apic[0], file_apic[1])
+                    img_html = f"<div class='fallback-art'><img src='{data_uri}' alt='File cover art (fallback)' class='thumb' /><p class='art-note'>Using file cover art (no chapter image)</p></div>"
                 else:
                     img_html = "<span class='no-art'>No art</span>"
 
@@ -336,6 +383,39 @@ code {{
 .no-art {{
     font-size: 0.8rem;
     color: #888;
+}}
+.corrupted-art {{
+    position: relative;
+    display: inline-block;
+}}
+.corrupted-art .thumb {{
+    opacity: 0.6;
+    border: 2px dashed #ff6b6b;
+}}
+.corrupted-art .art-note {{
+    margin: 0.3rem 0 0 0;
+    font-size: 0.7rem;
+    color: #ff6b6b;
+    font-weight: bold;
+}}
+.fallback-art {{
+    position: relative;
+    display: inline-block;
+}}
+.fallback-art .thumb {{
+    opacity: 0.7;
+    border: 2px dashed #ffb347;
+}}
+.fallback-art .art-note {{
+    margin: 0.3rem 0 0 0;
+    font-size: 0.7rem;
+    color: #ffb347;
+    font-weight: bold;
+}}
+.art-note {{
+    margin: 0.3rem 0 0 0;
+    font-size: 0.7rem;
+    font-weight: 600;
 }}
 </style>
 </head>

@@ -35,3 +35,8 @@ Steemer clip.m4a
 .vscode/
 .idea/
 *.code-workspace
+*.m3u
+*.mp3
+*.db
+.txt
+.env
