@@ -365,13 +365,6 @@ def write_chapters_to_mp3(
         # Determine chapter title
         chapter_title = f"{chapter.artist}: {chapter.title}"
 
-        # Get cover art for this chapter (prefer track art, fall back to default)
-        chapter_image = None
-        if resolved_paths.get(chapter.track_num):
-            chapter_image = get_cover_from_audio(resolved_paths[chapter.track_num])
-        if not chapter_image:
-            chapter_image = default_image
-
         # Create CHAP frame with title
         chap = CHAP(
             encoding=3,
@@ -385,12 +378,25 @@ def write_chapters_to_mp3(
         # Add title as a sub-frame
         chap.sub_frames.add(TIT2(encoding=3, text=[chapter_title]))
 
-        # Add artwork to chapter if available
-        if chapter_image:
-            image_data, mime = chapter_image
-            chap.sub_frames.add(
-                APIC(encoding=3, mime=mime, type=3, desc="", data=image_data)
-            )
+        # Add artwork to chapter:
+        # - For matched tracks: try to use track's own artwork
+        # - For unmatched tracks (voiceovers, etc): use default image if provided
+        is_matched = resolved_paths.get(chapter.track_num) is not None
+        if is_matched:
+            # Try to extract artwork from the matched track
+            track_image = get_cover_from_audio(resolved_paths[chapter.track_num])
+            if track_image:
+                image_data, mime = track_image
+                chap.sub_frames.add(
+                    APIC(encoding=3, mime=mime, type=3, desc="", data=image_data)
+                )
+        else:
+            # No match - use default image if provided (for unmatched/VO chapters)
+            if default_image:
+                image_data, mime = default_image
+                chap.sub_frames.add(
+                    APIC(encoding=3, mime=mime, type=3, desc="", data=image_data)
+                )
 
         tags[chapter_id] = chap
 
