@@ -60,6 +60,39 @@ python3 build_episode_from_playlist_library.py \
 
 ### Core Workflow
 
+#### `build_episode_from_cue.py`
+**Builds a chapterized podcast episode from a CUE file and recording.**
+
+Perfect for when you have a CUE sheet that matches a recording (e.g., from a vinyl rip or live show recording). Parses the CUE file, matches tracks against your Music library, and embeds proper chapter metadata.
+
+```bash
+python3 build_episode_from_cue.py \
+  --cue recording.cue \
+  --recording recording.mp3 \
+  --episode-title "Episode Title" \
+  --episode-date 20251123 \
+  --output episode.mp3 \
+  --default-image cover.jpg \
+  [--episode-artist "Show Name"] \
+  [--episode-album "Podcast Name"]
+```
+
+**Features:**
+- ✅ Parses CUE files with chapter titles and artists
+- ✅ Fuzzy matches chapter tracks against your Music library
+- ✅ Embeds chapter metadata with correct timecodes
+- ✅ Supports per-chapter artwork from matched tracks
+- ✅ Handles missing matches gracefully
+- ✅ Creates chapter report for verification
+
+**Workflow:**
+1. You have a CUE file and a matching recording (MP3/WAV/FLAC)
+2. The CUE file lists tracks with artists and timecodes
+3. Script matches these against your Music library
+4. Outputs a chapterized MP3 with proper metadata
+
+---
+
 #### `build_episode_from_playlist_library.py`
 **Builds a fully chapterized podcast episode from a Music.app playlist.**
 
