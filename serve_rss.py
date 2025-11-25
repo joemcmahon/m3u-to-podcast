@@ -2,7 +2,10 @@
 """
 Simple RSS feed server for testing podcast episodes locally.
 Serves an RSS feed on http://localhost:8000/feed.xml
-The episode points to the local Green.mp3 file.
+
+Set the PODCAST_EPISODE environment variable to the path of your episode MP3:
+    export PODCAST_EPISODE=/path/to/episode.mp3
+    python serve_rss.py
 """
 
 import os
@@ -12,10 +15,22 @@ from pathlib import Path
 from mutagen.id3 import ID3
 from urllib.parse import urljoin
 
+# Get episode file from environment variable
+EPISODE_FILE = os.getenv("PODCAST_EPISODE")
+if not EPISODE_FILE:
+    print("ERROR: PODCAST_EPISODE environment variable not set")
+    print("Usage: PODCAST_EPISODE=/path/to/episode.mp3 python serve_rss.py")
+    sys.exit(1)
+
+EPISODE_PATH = Path(EPISODE_FILE).resolve()
+if not EPISODE_PATH.exists():
+    print(f"ERROR: Episode file not found: {EPISODE_PATH}")
+    sys.exit(1)
+
 
 class RSSHandler(BaseHTTPRequestHandler):
     # Path to the episode MP3
-    EPISODE_FILE = Path("Green.mp3").resolve()
+    EPISODE_FILE = EPISODE_PATH
     EPISODE_URL = "http://localhost:8000/episode.mp3"
 
     def do_GET(self):
@@ -102,8 +117,9 @@ class RSSHandler(BaseHTTPRequestHandler):
 def main():
     port = 8000
     server = HTTPServer(("localhost", port), RSSHandler)
-    print(f"Serving RSS feed at http://localhost:{port}/feed.xml")
-    print(f"Episode MP3 at http://localhost:{port}/episode.mp3")
+    print(f"Serving episode: {EPISODE_PATH}")
+    print(f"RSS feed: http://localhost:{port}/feed.xml")
+    print(f"Episode MP3: http://localhost:{port}/episode.mp3")
     print(f"\nAdd http://localhost:{port}/feed.xml to your podcast app")
     print("Press Ctrl+C to stop")
 
