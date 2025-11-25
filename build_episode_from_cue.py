@@ -401,6 +401,7 @@ def write_chapters_to_mp3(
         tags[chapter_id] = chap
 
     # Create CTOC (table of contents)
+    # Note: frame_id in CTOC refers to the element_id, not the tag key
     ctoc = CTOC(
         encoding=3,
         frame_id="toc",
@@ -408,7 +409,7 @@ def write_chapters_to_mp3(
         child_element_ids=chapter_ids,
         sub_frames=[TIT2(encoding=3, text=[episode_title])]
     )
-    tags["toc"] = ctoc
+    tags["CTOC:toc"] = ctoc
 
     # Write tags
     tags.save(mp3_path, v2_version=3)
