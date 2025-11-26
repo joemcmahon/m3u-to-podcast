@@ -176,11 +176,12 @@ def cue_timestamp_to_seconds(cue_time: str) -> float:
 
 # -------- Music library matching -------- #
 
-def load_music_db() -> sqlite3.Connection:
+def load_music_db(db_path: Optional[Path] = None) -> sqlite3.Connection:
     """Load the music library database."""
-    if not MUSIC_DB_PATH.exists():
-        raise FileNotFoundError(f"Music database not found: {MUSIC_DB_PATH}")
-    return sqlite3.connect(MUSIC_DB_PATH)
+    path = db_path or MUSIC_DB_PATH
+    if not path.exists():
+        raise FileNotFoundError(f"Music database not found: {path}")
+    return sqlite3.connect(path)
 
 
 def fuzzy_match(query: str, target: str) -> float:
@@ -447,6 +448,9 @@ def main():
     parser.add_argument("--default-image", type=Path, help="Episode artwork image")
     parser.add_argument("--episode-artist", help="Episode artist (defaults to global CUE artist)")
     parser.add_argument("--episode-album", help="Episode album")
+    parser.add_argument("-l", "--library", type=Path, help="Path to Music library folder (for fuzzy matching)")
+    parser.add_argument("--rebuild-db", action="store_true", help="Rebuild the music database from the library")
+    parser.add_argument("-d", "--db", type=Path, help="Path to music database (default: music.db)")
 
     args = parser.parse_args()
 
@@ -459,13 +463,27 @@ def main():
     # Ensure output directory exists
     args.output.parent.mkdir(parents=True, exist_ok=True)
 
+    # Handle database rebuild if requested
+    if args.rebuild_db:
+        if not args.library:
+            raise ValueError("--library is required when using --rebuild-db")
+        info(f"Rebuilding music database from: {args.library}")
+        # Import here to avoid hard dependency
+        import subprocess
+        result = subprocess.run(
+            ["python", "build-music-db.py", str(args.library), "-d", str(args.db or MUSIC_DB_PATH)],
+            check=True
+        )
+        info("Database rebuild complete")
+
     info(f"Parsing CUE file: {args.cue}")
     chapters = parse_cue_file(args.cue)
     info(f"Found {len(chapters)} chapters")
 
     # Load music database
-    info(f"Loading music library database: {MUSIC_DB_PATH}")
-    db = load_music_db()
+    db_path = args.db or MUSIC_DB_PATH
+    info(f"Loading music library database: {db_path}")
+    db = load_music_db(Path(db_path) if args.db else None)
 
     # Resolve chapters to library tracks
     info("Resolving chapters to library tracks...")
