@@ -247,6 +247,11 @@ python3 rescue_busted_offsets.py broken.mp3
 
 # Or specify output:
 python3 rescue_busted_offsets.py broken.mp3 fixed.mp3
+
+# Or fix the file itself (e.g. after saving from Fission). A backup is copied
+# first as broken.before-rescue.mp3; add --no-backup to skip it. A file with
+# nothing to fix is left untouched.
+uv run python rescue_busted_offsets.py --in-place broken.mp3
 ```
 
 ---

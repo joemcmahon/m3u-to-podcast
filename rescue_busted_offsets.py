@@ -23,14 +23,20 @@ Usage:
 
     python rescue_chap_offsets.py broken.mp3
     python rescue_chap_offsets.py broken.mp3 fixed.mp3
+    python rescue_chap_offsets.py --in-place broken.mp3
 
 If the output path is omitted, it defaults to:
 
     broken.rescued.mp3
+
+With --in-place the file itself is fixed. Before touching it, a backup is copied
+next to it as "<name>.before-rescue.mp3" (numbered if that name is taken); use
+--no-backup to skip the backup. A file that needs no fixing is left untouched.
 """
 
-import sys
+import argparse
 import shutil
+import sys
 from pathlib import Path
 
 from mutagen import MutagenError
@@ -113,20 +119,64 @@ def rescue_chap_offsets(tags: ID3) -> int:
     return changed
 
 
-def main():
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print(f"Usage: {sys.argv[0]} broken.mp3 [fixed.mp3]")
-        sys.exit(1)
+def unique_backup_path(path: Path) -> Path:
+    """<name>.before-rescue.mp3, or <name>.before-rescue-2.mp3, ... never an existing file."""
+    candidate = path.with_name(f"{path.stem}.before-rescue{path.suffix}")
+    n = 2
+    while candidate.exists():
+        candidate = path.with_name(f"{path.stem}.before-rescue-{n}{path.suffix}")
+        n += 1
+    return candidate
 
-    input_path = Path(sys.argv[1])
+
+def rescue_in_place(input_path: Path, backup: bool) -> None:
+    print(f"[INFO] Loading ID3 tags from {input_path}")
+    tags = load_id3(input_path)
+    modified = rescue_chap_offsets(tags)
+
+    if modified == 0:
+        print("[INFO] No CHAP offsets needed fixing. File left untouched.")
+        return
+
+    if backup:
+        backup_path = unique_backup_path(input_path)
+        print(f"[INFO] Backing up {input_path} → {backup_path}")
+        shutil.copy2(input_path, backup_path)
+        if backup_path.stat().st_size != input_path.stat().st_size:
+            raise SystemExit(f"[ERROR] Backup size mismatch; {input_path} not modified.")
+
+    print(f"[INFO] Saving updated ID3 tags to {input_path} as v2.3 (in place)")
+    tags.save(input_path, v2_version=3)
+    print(f"[INFO] Done. Modified {modified} CHAP frame(s).")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Reset bogus CHAP byte offsets (e.g. 0xFFFFFFFF written by some editors) to 0.")
+    parser.add_argument("input", type=Path, help="MP3 with chapters")
+    parser.add_argument("output", type=Path, nargs="?",
+                        help="Where to write the fixed copy (default: <name>.rescued.mp3)")
+    parser.add_argument("--in-place", action="store_true",
+                        help="Fix the file itself (a backup is made first)")
+    parser.add_argument("--no-backup", action="store_true",
+                        help="With --in-place: do not keep a backup copy")
+    args = parser.parse_args()
+
+    input_path = args.input
     if not input_path.is_file():
         print(f"[ERROR] Input file not found: {input_path}")
         sys.exit(1)
 
-    if len(sys.argv) == 3:
-        output_path = Path(sys.argv[2])
-    else:
-        output_path = input_path.with_suffix(".rescued.mp3")
+    if args.in_place:
+        if args.output:
+            parser.error("--in-place cannot be combined with an output path")
+        rescue_in_place(input_path, backup=not args.no_backup)
+        print("[INFO] Rescue run complete.")
+        return
+    if args.no_backup:
+        parser.error("--no-backup only applies with --in-place")
+
+    output_path = args.output or input_path.with_suffix(".rescued.mp3")
 
     if output_path.exists():
         print(f"[ERROR] Output file already exists: {output_path}")
