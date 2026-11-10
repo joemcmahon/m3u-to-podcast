@@ -157,6 +157,20 @@ Another Artist | Another Track
 
 ---
 
+### Rebuilding a Show from an M3U (Voiceover Skeleton)
+
+When a live recording is unusable (levels too hot, etc.), rebuild the music from the playlist and swap the good voiceovers in by hand:
+
+```bash
+uv run python build_skeleton_from_m3u.py "20261109 Tonight.m3u"
+```
+
+Every playlist entry becomes a chapter. Entries with "equinox speaks" in the filename become 10-minute silent chapters labeled `VO - Break N`. Cut each silent clip in an editor (e.g. Fission, which shifts the chapter markers) and drop in the real voiceover. To rebuild with the recorded voiceovers in one step, put them in a folder named `voiceover01.mp3`, `voiceover02.m4a`, ... and pass `--voiceovers FOLDER`. Number 1 fills the first "Equinox Speaks" slot in the playlist, number 2 the second, and so on. The numbers must match the slots exactly, or the script stops before encoding and shows what doesn't line up. Voiceovers never touch your music library.
+
+Options: `--output`, `--voiceovers`, `--episode-title`, `--episode-date`, `--default-image`, `--silence-seconds`, `--bitrate`. Source files are only read, never converted in place.
+
+(`podcast-from-m3u.py` is the older version of this; it writes the chapter list to a `.txt` file and does not embed chapters.)
+
 ### Testing & Validation
 
 #### `serve_rss.py`
