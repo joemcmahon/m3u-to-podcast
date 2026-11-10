@@ -14,8 +14,11 @@ This project provides tools to:
 ## Installation
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (uv creates .venv and installs from uv.lock)
+uv sync
+
+# Run any script through uv, e.g.:
+uv run python build_episode_from_cue.py --help
 
 # Optional: Create a .env file for default values
 cp .env.example .env
@@ -318,12 +321,12 @@ python3 chapter-report.py Green.mp3 Green-report.html
 
 ## Requirements
 
-- Python 3.7+
+- Python 3.10-3.12 (managed by uv; pinned to 3.12 in `.python-version`, because the scripts use `imghdr`, removed in 3.13)
 - ffmpeg (for audio concatenation)
 - mutagen (ID3 tag handling)
 - dotenv (environment configuration)
 
-See `requirements.txt` for complete dependency list.
+See `pyproject.toml` for the complete dependency list.
 
 ---
 
