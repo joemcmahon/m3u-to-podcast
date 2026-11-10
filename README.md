@@ -169,8 +169,6 @@ Every playlist entry becomes a chapter. Entries with "equinox speaks" in the fil
 
 Options: `--output`, `--voiceovers`, `--episode-title`, `--episode-date`, `--default-image`, `--silence-seconds`, `--bitrate`. Source files are only read, never converted in place.
 
-(`podcast-from-m3u.py` is the older version of this; it writes the chapter list to a `.txt` file and does not embed chapters.)
-
 ### Testing & Validation
 
 #### `serve_rss.py`
@@ -261,13 +259,6 @@ Useful for finding files that need to be added or removed to sync up libraries.
 ```bash
 python3 compare-libraries.py library1.musiclibrary library2.musiclibrary
 ```
-
----
-
-### Legacy / Experimental
-
-#### `podcast-from-m3u.py`
-Older command-line interface for building podcast episodes. Replaced by `build_episode_from_playlist_library.py`.
 
 ---
 
