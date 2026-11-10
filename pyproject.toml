@@ -1,0 +1,14 @@
+[project]
+name = "m3u-to-podcast"
+version = "0.1.0"
+description = "Build chapterized podcast episodes from playlists and CUE files"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"  # scripts use imghdr, removed in 3.13
+dependencies = [
+    "mutagen>=1.47",
+    "tqdm>=4.64.0",
+    "python-dotenv>=1.0.0",
+]
+
+[tool.uv]
+package = false  # collection of scripts, not an installable package
