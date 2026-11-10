@@ -113,10 +113,20 @@ def find_voiceovers(folder: Path, entries: List[Path]) -> dict:
     return found
 
 
-def encode_cbr(src: Path, dst: Path, bitrate: str) -> None:
-    """Encode any audio file to bare CBR MP3 (no ID3 tag, no Xing header)."""
+PROGRESS_RE = re.compile(r"^[a-z_0-9]+=")
+
+
+def encode_cbr(src: Path, dst: Path, bitrate: str) -> List[float]:
+    """
+    Encode any audio file to bare CBR MP3 (no ID3 tag, no Xing header).
+
+    Returns the approximate positions (seconds into the source,
+    roughly +/-1s) of any decoder messages ffmpeg printed, e.g. "Header missing"
+    for a corrupt MP3 frame. ffmpeg skips the bad data and carries on.
+    """
     cmd = [
         "ffmpeg", "-v", "error", "-y",
+        "-progress", "pipe:2", "-nostats", "-stats_period", "0.001",
         "-i", str(src),
         "-vn", "-map_metadata", "-1",
         "-ac", "2", "-ar", SAMPLE_RATE,
@@ -124,7 +134,22 @@ def encode_cbr(src: Path, dst: Path, bitrate: str) -> None:
         "-write_xing", "0", "-write_id3v2", "0",
         str(dst),
     ]
-    subprocess.run(cmd, check=True)
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr)
+        sys.exit(f"ffmpeg failed on: {src}")
+
+    offsets: List[float] = []
+    position = 0.0
+    for line in r.stderr.splitlines():
+        if line.startswith(("out_time_us=", "out_time_ms=")):
+            try:
+                position = int(line.split("=", 1)[1]) / 1e6
+            except ValueError:
+                pass
+        elif line.strip() and not PROGRESS_RE.match(line):
+            offsets.append(round(position))  # nearest second; ffmpeg's timing is approximate
+    return sorted(set(offsets))
 
 
 def make_silence(dst: Path, seconds: int, bitrate: str) -> None:
@@ -141,6 +166,11 @@ def make_silence(dst: Path, seconds: int, bitrate: str) -> None:
 
 def duration_ms(mp3: Path) -> int:
     return int(round(MP3(mp3).info.length * 1000))
+
+
+def fmt_time(seconds: float) -> str:
+    s = int(seconds)
+    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
 
 
 def guess_episode_date(stem: str) -> str:
@@ -175,6 +205,7 @@ def build(args: argparse.Namespace) -> None:
     segments: List[Segment] = []
     pieces: List[Path] = []
     vo_count = 0
+    decode_issues: List[tuple] = []  # (entry index, source file, offsets)
 
     with tempfile.TemporaryDirectory(prefix="skeleton-") as tmp_name:
         tmp = Path(tmp_name)
@@ -190,7 +221,9 @@ def build(args: argparse.Namespace) -> None:
                     vo_src = vo_files[vo_count]
                     print(f"[{i + 1}/{len(entries)}] {label}  <-  {vo_src.name}")
                     piece = tmp / f"{i:03d}.mp3"
-                    encode_cbr(vo_src, piece, args.bitrate)
+                    offs = encode_cbr(vo_src, piece, args.bitrate)
+                    if offs:
+                        decode_issues.append((i, vo_src, offs))
                     segments.append(Segment(
                         index=i, kind="vo", role=f"break {vo_count}", date_code=None,
                         source_path=vo_src, title=label, duration_ms=duration_ms(piece),
@@ -207,7 +240,9 @@ def build(args: argparse.Namespace) -> None:
 
             piece = tmp / f"{i:03d}.mp3"
             print(f"[{i + 1}/{len(entries)}] {src.name}")
-            encode_cbr(src, piece, args.bitrate)
+            offs = encode_cbr(src, piece, args.bitrate)
+            if offs:
+                decode_issues.append((i, src, offs))
             segments.append(Segment(
                 index=i, kind="track", role=None, date_code=None,
                 source_path=src, title=get_track_title(src),
@@ -237,6 +272,17 @@ def build(args: argparse.Namespace) -> None:
     print(f"\nDone: {output}")
     print(f"{len(segments)} chapters ({vo_count} voiceover slots), "
           f"expected length {total / 60:.1f} min")
+
+    if decode_issues:
+        starts = [0]
+        for seg in segments:
+            starts.append(starts[-1] + seg.duration_ms)
+        print("\nHeads up: ffmpeg reported decoder errors in these source files "
+              "(it skips the bad data and carries on; worth a listen):")
+        for i, src, offs in decode_issues:
+            where = ", ".join(fmt_time(o) for o in offs[:5]) + (" ..." if len(offs) > 5 else "")
+            print(f"  - {src.name}  (chapter {i + 1})")
+            print(f"      at ~{where} in the track  =  ~{fmt_time(starts[i] / 1000 + offs[0])} in the episode")
 
 
 def main() -> None:
