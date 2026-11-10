@@ -41,3 +41,7 @@ Steemer clip.m4a
 *.db
 .txt
 .env
+
+# Local-only handoff notes (public repo)
+docs/HANDOFF.md
+docs/archive/
